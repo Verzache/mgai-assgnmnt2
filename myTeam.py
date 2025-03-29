@@ -1,162 +1,290 @@
-from captureAgents import CaptureAgent   
+# myTeam.py
+
+from captureAgents import CaptureAgent
 import random
 import math
+from game import Directions
 import time
 
-#   You'll need to adapt this to fit within the Pacman CTF environment
-#   and the 'myTeam.py' structure. This is a conceptual outline.
+#####################
+# Team Creation
+#####################
 
-class MCTSNode:
-    def __init__(self, game_state, parent=None, action=None):
-        self.game_state = game_state
-        self.parent = parent
-        self.action = action  # Action taken to reach this state
-        self.children = []
-        self.visits = 0
-        self.total_reward = 0
-        self.untried_actions = self.get_legal_actions(game_state)  #Needs implementation
+def createTeam(firstIndex, secondIndex, isRed,
+               first='MCTSAgent', second='MCTSAgent'):
+    return [eval(first)(firstIndex), eval(second)(secondIndex)]
 
-    def get_legal_actions(self, game_state):
-        #   Implement this based on the Pacman CTF game rules
-        #   It should return a list of valid actions for the current state
-        raise NotImplementedError
+#####################
+# MCTS Agent Definition
+#####################
 
-    def is_terminal_node(self, game_state):
-         #   Implement this based on the Pacman CTF game rules
-         #   Return True if the game is over, False otherwise
-        raise NotImplementedError
-
-    def calculate_heuristic_value(self, game_state):
-        #   Implement your heuristic evaluation function here
-        #   Combine offensive, defensive, and ghost scores
-        #   This is a crucial part of the assignment!
-        offensive_score = self.calculate_offensive_score(game_state)
-        defensive_score = self.calculate_defensive_score(game_state)
-        ghost_score = self.calculate_ghost_score(game_state)
-
-        return offensive_score + defensive_score + ghost_score
-
-    def calculate_offensive_score(self, game_state):
-        #   Calculate a score based on Pacman's offensive actions
-        #   Example factors: food eaten, distance to food, distance to return
-        raise NotImplementedError
-
-    def calculate_defensive_score(self, game_state):
-        #   Calculate a score based on Pacman's defensive actions
-        #   Example factors: distance to enemy Pacman, scared mode, distance to power capsules
-        raise NotImplementedError
-
-    def calculate_ghost_score(self, game_state):
-         #   Calculate a score based on the ghost's actions
-         #   Example factors: distance to enemy Pacman, is enemy Pacman scared
-        raise NotImplementedError
-
-def mcts_search(root_state, num_simulations, time_limit):
-    root_node = MCTSNode(root_state)
-    start_time = time.time()
-
-    for _ in range(num_simulations):
-        if time.time() - start_time > time_limit:
-            break  # respect time limit
-
-        node = select_node(root_node)
-        reward = simulate(node.game_state)  #Passing gamestate instead of node
-        backpropagate(node, reward)
-
-    return get_best_action(root_node)
-
-def select_node(node):
-    while not node.untried_actions and node.children:  # While fully expanded and not leaf
-        node = max(node.children, key=ucb1)
-    
-    if node.untried_actions:  # If we can expand
-        return expand_node(node)
-    return node           # Otherwise it's a leaf node
-
-def ucb1(node):
-    C = 1.4  # Exploration parameter (tune this)
-    if node.visits == 0:
-        return float('inf')
-    return (node.total_reward / node.visits) + C * math.sqrt(math.log(node.parent.visits) / node.visits)
-
-def expand_node(node):
-    action = node.untried_actions.pop()
-    next_state = get_next_state(node.game_state, action)  #Needs implementation
-    child_node = MCTSNode(next_state, parent=node, action=action)
-    node.children.append(child_node)
-    return child_node
-
-def simulate(game_state):
-    #   Simulate a game rollout from the given state
-    #   Use the heuristic to choose actions
-    while not MCTSNode.is_terminal_node(game_state):
-        legal_actions = MCTSNode.get_legal_actions(game_state)
-        if not legal_actions:
-            break  # No legal actions, game over
-
-        best_action = None
-        best_value = float('-inf')
-
-        for action in legal_actions:
-            next_state = get_next_state(game_state, action) #Needs implementation
-            heuristic_value = MCTSNode.calculate_heuristic_value(next_state)
-            if heuristic_value > best_value:
-                best_value = heuristic_value
-                best_action = action
-
-        game_state = get_next_state(game_state, best_action) #Needs implementation
-
-    return get_reward(game_state)  #Needs implementation
-
-def backpropagate(node, reward):
-    while node is not None:
-        node.visits += 1
-        node.total_reward += reward
-        node = node.parent
-
-def get_best_action(node):
-    #   Choose the best action from the root node after the search
-    #   Most visited child or highest average reward
-    best_child = max(node.children, key=lambda child: child.visits)
-    #best_child = max(node.children, key=lambda child: child.total_reward / child.visits)
-    return best_child.action
-
-#   --------------------------------------------------------------------------
-#   Placeholder functions - YOU MUST IMPLEMENT THESE BASED ON PACMAN CTF
-#   --------------------------------------------------------------------------
-
-def get_next_state(game_state, action):
-    #   This function takes a game state and an action
-    #   and returns the next game state.
-    #   Crucially, this needs to handle the game logic of Pacman CTF,
-    #   including agent movements, food consumption, ghost interactions, etc.
-    raise NotImplementedError
-
-def get_reward(game_state):
-    #   This function takes a game state and returns a reward value.
-    #   The reward should reflect how favorable the state is for your agent.
-    #   This could be based on the score, whether you're winning, etc.
-    raise NotImplementedError
-
-#   --------------------------------------------------------------------------
-#   Pacman CTF Agent Integration
-#   --------------------------------------------------------------------------
-
-class MyAgent(CaptureAgent):  #Inherit from CaptureAgent
+class MCTSAgent(CaptureAgent):
     def __init__(self, index):
         super().__init__(index)
+        self.simulations = 50  # Fewer simulations for faster moves
+        self.simulation_depth = 15  # Reduced depth to avoid loops
+        self.exploration_factor = 1.4
+        self.visited_positions = {}  # Changed to a dict to track frequency
+        self.prev_action = None
+        self.stuck_count = 0  # Track how many times stuck
+        self.last_score = 0  # Track score to detect progress
 
-    def registerInitialState(self, gameState):
-        super().registerInitialState(gameState)
-        #   Any initial setup code here
-
+    #####################
+    # Action Selection
+    #####################
     def chooseAction(self, gameState):
-        #   This is where you call the MCTS search
-        legal_actions = self.getLegalActions(gameState) # from CaptureAgent
-        if not legal_actions:
-            return None  # Or a default action
+        current_position = gameState.getAgentPosition(self.index)
+        current_score = self.getScore(gameState)
+        
+        # Check if score changed - reset stuck counter if we're making progress
+        if current_score != self.last_score:
+            self.stuck_count = 0
+            self.last_score = current_score
+        
+        # Update position frequency counter
+        if current_position in self.visited_positions:
+            self.visited_positions[current_position] += 1
+            # If we've been at this position too many times, we're stuck
+            if self.visited_positions[current_position] >= 3:
+                self.stuck_count += 1
+        else:
+            self.visited_positions[current_position] = 1
+        
+        # Adjust exploration dynamically based on being stuck
+        original_exploration = self.exploration_factor
+        if self.stuck_count > 2:
+            self.exploration_factor = 2.5  # Increase exploration when stuck
+            
+        # If really stuck, take random action to break out
+        if self.stuck_count > 5:
+            legal_actions = gameState.getLegalActions(self.index)
+            # Filter out reverse direction if possible to avoid back-and-forth
+            if len(legal_actions) > 1 and self.prev_action:
+                reverse = self.getReverse(self.prev_action)
+                if reverse in legal_actions:
+                    legal_actions.remove(reverse)
+            # Choose random action that's not the reverse
+            action = random.choice(legal_actions)
+            self.stuck_count = 0  # Reset counter
+            self.visited_positions = {}  # Clear history when taking emergency action
+            self.prev_action = action
+            return action
+        
+        # Normal MCTS search
+        action = self.mctsSearch(gameState)
+        
+        # Reset exploration factor to original
+        self.exploration_factor = original_exploration
+        
+        # If we're taking the same action repeatedly, increase stuck counter
+        if action == self.prev_action:
+            self.stuck_count += 1
+        else:
+            self.stuck_count = max(0, self.stuck_count - 1)
+        
+        # Remember this action
+        self.prev_action = action
+        
+        # Limit the size of visited_positions dictionary (keep most recent)
+        if len(self.visited_positions) > 100:
+            # Only keep positions visited frequently
+            self.visited_positions = {k: v for k, v in self.visited_positions.items() if v > 1}
+        
+        return action
 
-        best_action = mcts_search(gameState, num_simulations=100, time_limit=0.9)  # Adjust parameters
-        if best_action is None or best_action not in legal_actions:
-            return random.choice(legal_actions)
+    def getReverse(self, action):
+        """Returns the reverse of an action"""
+        if action == Directions.NORTH:
+            return Directions.SOUTH
+        elif action == Directions.SOUTH:
+            return Directions.NORTH
+        elif action == Directions.EAST:
+            return Directions.WEST
+        elif action == Directions.WEST:
+            return Directions.EAST
+        return action  # STOP remains STOP
+
+    #####################
+    # MCTS Core Algorithm
+    #####################
+    def mctsSearch(self, gameState):
+        root = Node(gameState, None)
+        for _ in range(self.simulations):
+            node = self.selection(root)
+            if not node.is_fully_expanded():
+                child = self.expansion(node)
+                reward = self.simulation(child.state)
+                self.backpropagation(child, reward)
+        
+        # Choose action based on best child, with a penalty for frequently visited positions
+        best_score = float('-inf')
+        best_action = None
+        
+        for child in root.children:
+            next_pos = child.state.getAgentPosition(self.index)
+            # Apply a penalty for frequently visited positions
+            position_penalty = self.visited_positions.get(next_pos, 0) * 0.5
+            child_score = child.visits - position_penalty
+            
+            if child_score > best_score:
+                best_score = child_score
+                best_action = child.action
+        
+        # If all actions lead to penalized positions, just use regular selection
+        if best_action is None and root.children:
+            best_child = max(root.children, key=lambda c: c.visits)
+            best_action = best_child.action
+        
         return best_action
+
+    #####################
+    # MCTS Steps
+    #####################
+
+    # Selection: Choose node with highest UCB1
+    def selection(self, node):
+        while node.children:
+            node = max(node.children, key=lambda c: c.ucb1(self.exploration_factor))
+        return node
+
+    # Expansion: Add a new child node
+    def expansion(self, node):
+        legal_actions = node.state.getLegalActions(self.index)
+        for action in legal_actions:
+            new_state = node.state.generateSuccessor(self.index, action)
+            if not any(child.action == action for child in node.children):
+                child_node = Node(new_state, node, action)
+                node.children.append(child_node)
+        return random.choice(node.children)
+
+    # Simulation: Perform a random playout with heuristic bias
+    def simulation(self, state):
+        depth = 0
+        current_state = state
+        visited_in_sim = set()  # Track positions visited during simulation
+        
+        while depth < self.simulation_depth and not current_state.isOver():
+            legal_actions = current_state.getLegalActions(self.index)
+            my_pos = current_state.getAgentPosition(self.index)
+            
+            # Add current position to simulation history
+            visited_in_sim.add(my_pos)
+            
+            # If too few actions or we're in a loop, stop simulation
+            if len(legal_actions) <= 1 or len(visited_in_sim) > self.simulation_depth + 5:
+                break
+                
+            # Use heuristic bias for action selection
+            weights = []
+            for action in legal_actions:
+                successor = current_state.generateSuccessor(self.index, action)
+                new_pos = successor.getAgentPosition(self.index)
+                
+                # Penalize revisiting positions in this simulation
+                if new_pos in visited_in_sim:
+                    weights.append(0.1)  # Very small chance to revisit
+                    continue
+                
+                # Get food and enemy positions
+                food_list = self.getFood(successor).asList()
+                enemies = [successor.getAgentState(i) for i in self.getOpponents(successor)]
+                ghosts = [e for e in enemies if not e.isPacman and e.getPosition() and e.scaredTimer <= 0]
+                
+                # Calculate weights based on distance to food and ghosts
+                if food_list:
+                    food_dist = min([self.getMazeDistance(new_pos, food) for food in food_list])
+                    food_weight = 1.0 / (food_dist + 1)
+                else:
+                    food_weight = 0
+                
+                # Avoid ghosts
+                ghost_weight = 0
+                for ghost in ghosts:
+                    if ghost.getPosition():
+                        ghost_dist = self.getMazeDistance(new_pos, ghost.getPosition())
+                        if ghost_dist < 3:
+                            ghost_weight = -5 / (ghost_dist + 0.1)  # Strong negative weight for nearby ghosts
+                
+                # Combine weights
+                total_weight = food_weight + ghost_weight
+                if total_weight <= 0:
+                    total_weight = 0.1  # Ensure non-negative weight
+                    
+                weights.append(total_weight)
+            
+            # Normalize weights for selection
+            if sum(weights) == 0:
+                weights = [1] * len(legal_actions)  # Equal weights if all are zero
+            
+            # Choose action probabilistically based on weights
+            chosen_idx = self.weightedRandomChoice(weights)
+            best_action = legal_actions[chosen_idx]
+            
+            current_state = current_state.generateSuccessor(self.index, best_action)
+            depth += 1
+            
+        return self.evaluateState(current_state)
+    
+    def weightedRandomChoice(self, weights):
+        """Choose an index based on weights"""
+        total = sum(weights)
+        r = random.uniform(0, total)
+        upto = 0
+        for i, w in enumerate(weights):
+            upto += w
+            if upto >= r:
+                return i
+        return len(weights) - 1  # Fallback
+    
+    def evaluateState(self, state):
+        """Evaluate state more carefully than just score"""
+        # Base score from game
+        score = self.getScore(state)
+        
+        # Add bonus for food carried
+        my_state = state.getAgentState(self.index)
+        carrying = my_state.numCarrying
+        score += carrying * 0.5  # Partial credit for food being carried
+        
+        # Penalize being chased by ghosts
+        my_pos = state.getAgentPosition(self.index)
+        enemies = [state.getAgentState(i) for i in self.getOpponents(state)]
+        ghosts = [e for e in enemies if not e.isPacman and e.getPosition() and e.scaredTimer <= 0]
+        
+        for ghost in ghosts:
+            if ghost.getPosition():
+                ghost_dist = self.getMazeDistance(my_pos, ghost.getPosition())
+                if ghost_dist < 3:
+                    score -= (3 - ghost_dist) * carrying  # Bigger penalty if carrying food
+        
+        return score
+
+    # Backpropagation: Update the value and visits for each node in the path
+    def backpropagation(self, node, reward):
+        while node:
+            node.visits += 1
+            node.value += reward
+            node = node.parent
+
+#####################
+# MCTS Node Class
+#####################
+
+class Node:
+    def __init__(self, state, parent=None, action=None):
+        self.state = state
+        self.parent = parent
+        self.action = action
+        self.children = []
+        self.visits = 0
+        self.value = 0
+
+    # Check if the node is fully expanded
+    def is_fully_expanded(self):
+        return len(self.children) == len(self.state.getLegalActions(0))
+
+    # Calculate the UCB1 score
+    def ucb1(self, exploration_factor):
+        if self.visits == 0:
+            return float('inf')
+        return (self.value / self.visits) + exploration_factor * math.sqrt(math.log(self.parent.visits + 1) / (self.visits + 1))

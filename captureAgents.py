@@ -17,9 +17,11 @@
 """
 
 from game import Agent
+import random
 import distanceCalculator
 from util import nearestPoint
 import util
+
 
 # Note: the following class is not used, but is kept for backwards
 # compatibility with team submissions that try to import it.
@@ -120,7 +122,7 @@ class CaptureAgent(Agent):
 
   def observationFunction(self, gameState):
     " Changing this won't affect pacclient.py, but will affect capture.py "
-    return gameState.makeObservation(self.index)
+    return gameState
 
   def debugDraw(self, cells, color, clear=False):
 
